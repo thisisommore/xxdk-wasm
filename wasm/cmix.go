@@ -241,8 +241,10 @@ func LoadSynchronizedCmix(_ js.Value, args []js.Value) any {
 //
 // Returns error or nil
 func UnloadCmix(_ js.Value, args []js.Value) any {
-	cmixID := args[0].Int()
-	return bindings.DeleteCmixInstance(cmixID)
+	//TODO: this code causes undefined: bindings.DeleteCmixInstance [js,wasm]
+	// cmixID := args[0].Int()
+	// return bindings.DeleteCmixInstance(cmixID)
+	return 1
 }
 
 // GetID returns the ID for this [bindings.Cmix] in the cmixTracker.

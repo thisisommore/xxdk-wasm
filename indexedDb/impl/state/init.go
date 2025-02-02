@@ -10,10 +10,12 @@
 package main
 
 import (
+	"syscall/js"
+
 	"github.com/hack-pad/go-indexeddb/idb"
+	"github.com/hack-pad/safejs"
 	jww "github.com/spf13/jwalterweatherman"
 	"gitlab.com/elixxir/xxdk-wasm/indexedDb/impl"
-	"syscall/js"
 )
 
 // currentVersion is the current version of the IndexedDb runtime. Used for
@@ -31,7 +33,9 @@ func newState(databaseName string) (*stateModel, error) {
 	// Attempt to open database object
 	ctx, cancel := impl.NewContext()
 	defer cancel()
-	openRequest, err := idb.Global().Open(ctx, databaseName, currentVersion,
+	indexedDB2, _ := safejs.Global().Get("indexedDB2")
+	gloObj,_:=idb.WrapFactory(safejs.Unsafe(indexedDB2))
+	openRequest, err := gloObj.Open(ctx, databaseName, currentVersion,
 		func(db *idb.Database, oldVersion, newVersion uint) error {
 			if oldVersion == newVersion {
 				jww.INFO.Printf("IndexDb version for %s is current: v%d",

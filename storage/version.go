@@ -17,7 +17,7 @@ import (
 	jww "github.com/spf13/jwalterweatherman"
 
 	"gitlab.com/elixxir/client/v4/bindings"
-	"gitlab.com/elixxir/wasm-utils/storage"
+	"gitlab.com/elixxir/xxdk-wasm/storage/ls"
 )
 
 // SEMVER is the current semantic version of xxDK WASM.
@@ -36,11 +36,11 @@ const (
 // On first load, only the xxDK WASM and xxDK client versions are stored.
 func CheckAndStoreVersions() error {
 	return checkAndStoreVersions(
-		SEMVER, bindings.GetVersion(), storage.GetLocalStorage())
+		SEMVER, bindings.GetVersion(), ls.GetLocalStorage())
 }
 
 func checkAndStoreVersions(
-	currentWasmVer, currentClientVer string, ls storage.LocalStorage) error {
+	currentWasmVer, currentClientVer string, ls *ls.LocalStorage) error {
 	// Get the stored client version, if it exists
 	storedClientVer, err :=
 		initOrLoadStoredSemver(clientVerKey, currentClientVer, ls)
@@ -91,7 +91,7 @@ func checkAndStoreVersions(
 // local storage. If no version is stored, then the current version is stored
 // and returned.
 func initOrLoadStoredSemver(
-	key, currentVersion string, ls storage.LocalStorage) (string, error) {
+	key, currentVersion string, ls *ls.LocalStorage) (string, error) {
 	storedVersion, err := ls.Get(key)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {

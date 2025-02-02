@@ -25,7 +25,8 @@ import (
 
 	"gitlab.com/elixxir/crypto/hash"
 	"gitlab.com/elixxir/wasm-utils/exception"
-	"gitlab.com/elixxir/wasm-utils/storage"
+	"gitlab.com/elixxir/xxdk-wasm/storage/ls"
+
 	"gitlab.com/elixxir/wasm-utils/utils"
 	"gitlab.com/xx_network/crypto/csprng"
 )
@@ -142,7 +143,7 @@ func VerifyPassword(_ js.Value, args []js.Value) any {
 // getOrInit is the private function for GetOrInitPassword that is used for
 // testing.
 func getOrInit(externalPassword string) ([]byte, error) {
-	localStorage := storage.GetLocalStorage()
+	localStorage := ls.GetLocalStorage()
 	internalPassword, err := getInternalPassword(externalPassword, localStorage)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
@@ -163,7 +164,7 @@ func changeExternalPassword(oldExternalPassword, newExternalPassword string) err
 	// NOTE: the following no longer works in synchronized environments, so
 	// disabled in produciton.
 	jww.FATAL.Panicf("cannot change password, unimplemented")
-	localStorage := storage.GetLocalStorage()
+	localStorage := ls.GetLocalStorage()
 	internalPassword, err := getInternalPassword(
 		oldExternalPassword, localStorage)
 	if err != nil {
@@ -192,33 +193,27 @@ func changeExternalPassword(oldExternalPassword, newExternalPassword string) err
 // verifyPassword is the private function for VerifyPassword that is used for
 // testing.
 func verifyPassword(externalPassword string) bool {
-	_, err := getInternalPassword(externalPassword, storage.GetLocalStorage())
+	_, err := getInternalPassword(externalPassword, ls.GetLocalStorage())
 	return err == nil
 }
 
 // initInternalPassword generates a new internal password, stores an encrypted
 // version in local storage, and returns it.
-func initInternalPassword(externalPassword string,
-	localStorage storage.LocalStorage, csprng io.Reader,
-	params argonParams) ([]byte, error) {
+func initInternalPassword(
+	externalPassword string,
+	localStorage *ls.LocalStorage,
+	csprng io.Reader,
+	params argonParams,
+) ([]byte, error) {
 	internalPassword := make([]byte, internalPasswordLen)
 
 	// FIXME: The internal password is now just an expansion of
-	// the users password text. We couldn't preserve the following
+	// the user's password text. We couldn't preserve the following
 	// when doing cross-device sync.
 	h := hash.CMixHash.New()
 	h.Write([]byte(externalPassword))
 	h.Write(internalPassword)
 	copy(internalPassword, h.Sum(nil)[:internalPasswordLen])
-
-	// Generate internal password
-	// n, err := csprng.Read(internalPassword)
-	// if err != nil {
-	// 	return nil, errors.Errorf(readInternalPasswordErr, err)
-	// } else if n != internalPasswordLen {
-	// 	return nil, errors.Errorf(
-	// 		internalPasswordNumBytesErr, internalPasswordLen, n)
-	// }
 
 	// Generate and store salt
 	salt, err := makeSalt(csprng)
@@ -226,8 +221,7 @@ func initInternalPassword(externalPassword string,
 		return nil, err
 	}
 	if err = localStorage.Set(saltKey, salt); err != nil {
-		return nil,
-			errors.Wrapf(err, "localStorage: failed to set %q", saltKey)
+		return nil, errors.Wrapf(err, "localStorage: failed to set %q", saltKey)
 	}
 
 	// Store argon2 parameters
@@ -236,53 +230,63 @@ func initInternalPassword(externalPassword string,
 		return nil, err
 	}
 	if err = localStorage.Set(argonParamsKey, paramsData); err != nil {
-		return nil,
-			errors.Wrapf(err, "localStorage: failed to set %q", argonParamsKey)
+		return nil, errors.Wrapf(err, "localStorage: failed to set %q", argonParamsKey)
 	}
 
+	// Debug for deriveKey parameters
+	jww.DEBUG.Printf("deriveKey: extPwd=%s, salt=%x, params=%+v", externalPassword, salt, params)
 	key := deriveKey(externalPassword, salt, params)
+	jww.DEBUG.Printf("derived key: %x", key)
 
+	// Debug for encryptPassword parameters
+	jww.DEBUG.Printf("encryptPassword: internalPwd=%x, key=%x", internalPassword, key)
 	encryptedInternalPassword := encryptPassword(internalPassword, key, csprng)
 	if err = localStorage.Set(passwordKey, encryptedInternalPassword); err != nil {
-		return nil,
-			errors.Wrapf(err, "localStorage: failed to set %q", passwordKey)
+		return nil, errors.Wrapf(err, "localStorage: failed to set %q", passwordKey)
 	}
-
+	jww.DEBUG.Printf("encryptedInternalPassword: %x", encryptedInternalPassword)
 	return internalPassword, nil
 }
 
 // getInternalPassword retrieves the internal password from local storage,
 // decrypts it, and returns it.
 func getInternalPassword(
-	externalPassword string, localStorage storage.LocalStorage) ([]byte, error) {
+	externalPassword string, localStorage *ls.LocalStorage) ([]byte, error) {
+
 	encryptedInternalPassword, err := localStorage.Get(passwordKey)
 	if err != nil {
 		return nil, errors.WithMessage(err, getPasswordStorageErr)
 	}
+	jww.DEBUG.Printf("Retrieved encryptedInternalPassword: %x", encryptedInternalPassword)
 
 	salt, err := localStorage.Get(saltKey)
 	if err != nil {
 		return nil, errors.WithMessage(err, getSaltStorageErr)
 	}
+	jww.DEBUG.Printf("Retrieved salt: %x", salt)
 
 	paramsData, err := localStorage.Get(argonParamsKey)
 	if err != nil {
 		return nil, errors.WithMessage(err, getParamsStorageErr)
 	}
+	jww.DEBUG.Printf("Retrieved argonParams data: %s", paramsData)
 
 	var params argonParams
 	err = json.Unmarshal(paramsData, &params)
 	if err != nil {
 		return nil, errors.Errorf(paramsUnmarshalErr, err)
 	}
+	jww.DEBUG.Printf("Unmarshaled argonParams: %+v", params)
 
+	jww.WARN.Printf("externalPassword: %s", externalPassword)
 	key := deriveKey(externalPassword, salt, params)
+	jww.DEBUG.Printf("Derived key: %x", key)
 
-	decryptedInternalPassword, err :=
-		decryptPassword(encryptedInternalPassword, key)
+	decryptedInternalPassword, err := decryptPassword(encryptedInternalPassword, key)
 	if err != nil {
 		return nil, errors.Errorf(decryptPasswordErr, err)
 	}
+	jww.DEBUG.Printf("Decrypted internal password: %x", decryptedInternalPassword)
 
 	return decryptedInternalPassword, nil
 }
@@ -301,6 +305,7 @@ func encryptPassword(data, password []byte, csprng io.Reader) []byte {
 // decryptPassword decrypts the encrypted data from a shared URL using
 // XChaCha20-Poly1305.
 func decryptPassword(data, password []byte) ([]byte, error) {
+	jww.INFO.Printf("password is %v", password)
 	chaCipher := initChaCha20Poly1305(password)
 	nonceLen := chaCipher.NonceSize()
 	if (len(data) - nonceLen) <= 0 {

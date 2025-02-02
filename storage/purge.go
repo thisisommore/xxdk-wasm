@@ -17,7 +17,7 @@ import (
 	jww "github.com/spf13/jwalterweatherman"
 
 	"gitlab.com/elixxir/wasm-utils/exception"
-	"gitlab.com/elixxir/wasm-utils/storage"
+	"gitlab.com/elixxir/xxdk-wasm/storage/ls"
 )
 
 // numClientsRunning is an atomic that tracks the current number of Cmix
@@ -86,11 +86,11 @@ func Purge(_ js.Value, args []js.Value) any {
 	}
 
 	// Get local storage
-	ls := storage.GetLocalStorage()
+	ls := ls.GetLocalStorage()
 
 	// Clear all local storage saved by this WASM project
-	n := ls.Clear()
-	jww.DEBUG.Printf("[PURGE] Cleared %d WASM keys in local storage", n)
+	ls.Clear()
+	jww.DEBUG.Printf("[PURGE] Cleared WASM keys in local storage")
 
 	return nil
 }
