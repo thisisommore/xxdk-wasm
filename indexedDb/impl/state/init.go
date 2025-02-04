@@ -33,9 +33,7 @@ func newState(databaseName string) (*stateModel, error) {
 	// Attempt to open database object
 	ctx, cancel := impl.NewContext()
 	defer cancel()
-	indexedDB2, _ := safejs.Global().Get("indexedDB2")
-	gloObj,_:=idb.WrapFactory(safejs.Unsafe(indexedDB2))
-	openRequest, err := gloObj.Open(ctx, databaseName, currentVersion,
+	openRequest, err := idb.Global().Open(ctx, databaseName, currentVersion,
 		func(db *idb.Database, oldVersion, newVersion uint) error {
 			if oldVersion == newVersion {
 				jww.INFO.Printf("IndexDb version for %s is current: v%d",
