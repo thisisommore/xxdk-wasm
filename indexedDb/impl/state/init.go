@@ -13,7 +13,6 @@ import (
 	"syscall/js"
 
 	"github.com/hack-pad/go-indexeddb/idb"
-	"github.com/hack-pad/safejs"
 	jww "github.com/spf13/jwalterweatherman"
 	"gitlab.com/elixxir/xxdk-wasm/indexedDb/impl"
 )
